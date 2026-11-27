@@ -98,6 +98,14 @@ If your GitHub org isn't `HasmanIT`, update the `repo_url`s in the demo test (th
 
 ---
 
+### Multiple attempts
+
+Each test has a **Max attempts** setting (test editor → Settings). `1` (the default) makes it one-shot; any other number allows that many tries; leave it empty for unlimited.
+
+- An intern can retake a test only after you **release results** for it, and only one attempt can be in progress at a time.
+- Each attempt is graded separately, with its own hints and flag guesses. On **Attempts**, the ★ marks each intern's best attempt, and the CSV has `attempt`, `is_best_attempt` and `best_score` columns.
+- Flags don't change between attempts, so an intern who captured a flag can paste it again. Treat retakes as practice for the CTF part.
+
 ## 3. Local development
 
 Local Supabase runs in Docker. **On Windows, Docker Desktop needs WSL 2.** Run `wsl --install` in an admin PowerShell, then reboot.
@@ -133,6 +141,7 @@ npm run test:flow                          # 2, 4  invite → login; complete th
 PYTHON=python npm run test:ctf             # 5     reference flags accepted (runs make_flag.py from ../../intern-ctf-solutions); cooldown
 AI_MODE=live npm run test:ai               # 6     scores + rationales; prompt injection doesn't get full marks
 AI_MODE=fail npm run test:ai               # 6     with GRADER_MODEL set to a model that doesn't exist: failures show as needs_review
+npm run test:retake                        # multiple attempts: limit, release gate, one in progress, per-attempt hints
 npm run test:ui                            # 3, 4  drives the web app in your installed Chrome (run `npm run dev` in web/ first)
 ```
 
@@ -146,7 +155,7 @@ npm run test:ui                            # 3, 4  drives the web app in your in
 | --- | --- | --- |
 | `invite_user` | admin | Creates a confirmed login. The `on_auth_user_created` trigger makes the taker profile |
 | `set_question_key` | admin | Sets answer keys. For CTF, stores only `sha256(salt + flag)` with a random salt |
-| `start_attempt` | taker | Open test, no existing attempt. Sets `deadline_at = now + duration` |
+| `start_attempt` | taker | Open test, no attempt in progress, under the test's **Max attempts**, and (for a retake) results released. Sets `deadline_at = now + duration` |
 | `reveal_hint` | taker | Records the reveal once and returns the text |
 | `check_flag` | taker | Compares with the salted hash and logs each guess (never the guess itself). After 10 wrong guesses, a 60 s cooldown |
 | `submit_attempt` | taker / admin | Locks and grades: mcq / bughunt / ctf automatically, short answers by AI. Admin form `{test_id, overdue_only: true}` sweeps overdue attempts |

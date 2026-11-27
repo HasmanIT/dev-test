@@ -110,7 +110,9 @@ export function AttemptDetail() {
       </p>
       <div className="row-between">
         <div>
-          <h1>{attempt.profiles?.display_name}</h1>
+          <h1>
+            {attempt.profiles?.display_name} <span className="muted">· attempt {attempt.attempt_number}</span>
+          </h1>
           <p className="muted">
             {attempt.profiles?.email} · <span className={`pill pill-${attempt.status}`}>{attempt.status.replace("_", " ")}</span> · started{" "}
             {fmtDateTime(attempt.started_at)} · {taken !== null ? `took ${fmtDuration(taken)}` : `deadline ${fmtDateTime(attempt.deadline_at)}`}

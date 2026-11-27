@@ -3,13 +3,15 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { errorMessage, must } from "../lib/api";
 import { fmtDuration, fmtScore } from "../lib/format";
-import { TYPE_LABELS, type Attempt, type Grade, type Question, type Test } from "../lib/types";
+import { TYPE_LABELS, startState, type Attempt, type Grade, type Question, type Test } from "../lib/types";
+import { useAuth } from "../lib/auth";
 import { ErrorBox, Spinner } from "../components/Layout";
 import { Markdown } from "../components/Markdown";
 
 export function Results() {
   const { attemptId } = useParams();
-  const [data, setData] = useState<{ attempt: Attempt; test: Test; questions: Question[]; grades: Grade[] } | null>(null);
+  const { profile } = useAuth();
+  const [data, setData] = useState<{ attempt: Attempt; test: Test; questions: Question[]; grades: Grade[]; all: Attempt[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,7 +21,10 @@ export function Results() {
         const test = must(await supabase.from("tests").select("*").eq("id", attempt.test_id).single()) as Test;
         const questions = must(await supabase.from("questions").select("*").eq("test_id", test.id).order("position")) as Question[];
         const grades = must(await supabase.from("grades").select("*").eq("attempt_id", attempt.id)) as Grade[];
-        setData({ attempt, test, questions, grades });
+        const all = must(
+          await supabase.from("attempts").select("*").eq("test_id", test.id).eq("user_id", attempt.user_id).order("attempt_number"),
+        ) as Attempt[];
+        setData({ attempt, test, questions, grades, all });
       } catch (err) {
         setError(errorMessage(err));
       }
@@ -28,7 +33,8 @@ export function Results() {
 
   if (error) return <ErrorBox error={error} />;
   if (!data) return <Spinner />;
-  const { attempt, test, questions, grades } = data;
+  const { attempt, test, questions, grades, all } = data;
+  const next = startState(test, all, profile?.role === "taker");
   const byQ = new Map(grades.map((g) => [g.question_id, g]));
   const total = grades.reduce((s, g) => s + Number(g.score), 0);
   const max = questions.reduce((s, q) => s + q.points, 0);
@@ -39,7 +45,31 @@ export function Results() {
       <p>
         <Link to="/">← My tests</Link>
       </p>
-      <h1>{test.title}: results</h1>
+      <h1>
+        {test.title}: results{all.length > 1 || test.max_attempts !== 1 ? ` · attempt ${attempt.attempt_number}` : ""}
+      </h1>
+      {(all.length > 1 || next === "retake") && (
+        <div className="row attempt-nav">
+          {all
+            .filter((a) => a.status !== "in_progress")
+            .map((a) =>
+              a.id === attempt.id ? (
+                <span key={a.id} className="pill pill-open">
+                  Attempt {a.attempt_number}
+                </span>
+              ) : (
+                <Link key={a.id} className="pill" to={`/results/${a.id}`}>
+                  Attempt {a.attempt_number}
+                </Link>
+              ),
+            )}
+          {next === "retake" && (
+            <Link className="btn btn-primary" to={`/test/${test.id}`}>
+              Start attempt {all.length + 1}
+            </Link>
+          )}
+        </div>
+      )}
       {attempt.status === "in_progress" ? (
         <div className="alert alert-info">
           This attempt is still in progress. <Link to={`/test/${test.id}`}>Go back to the test.</Link>

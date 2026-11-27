@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { ApiError, callFn, clockOffset, errorMessage, must } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { fmtDuration } from "../lib/format";
-import { TYPE_LABELS, type Attempt, type Hint, type MyHint, type Question, type Response, type Test } from "../lib/types";
+import { TYPE_LABELS, startState, type Attempt, type Hint, type MyHint, type Question, type Response, type Test } from "../lib/types";
 import { ErrorBox, Spinner } from "../components/Layout";
 import { Markdown } from "../components/Markdown";
 import { CodeLines } from "../components/CodeLines";
@@ -41,6 +41,9 @@ function isAnswered(q: Question, r: Response | undefined, cap: Capture | undefin
 
 function Runner({ testId, preview }: { testId: string; preview: boolean }) {
   const { profile } = useAuth();
+  // Depend on the id, not the profile object: a session refresh reloads the profile and must not
+  // re-run the loader (which would reset a running preview to its start screen).
+  const userId = profile?.id;
   const navigate = useNavigate();
 
   const [test, setTest] = useState<Test | null>(null);
@@ -52,6 +55,7 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [needsStart, setNeedsStart] = useState(false);
+  const [priorAttempts, setPriorAttempts] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -106,14 +110,21 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
           setHints(hs.map((h) => ({ hint_id: h.id, question_id: h.question_id, position: h.position, cost_points: h.cost_points, revealed: false, text: h.text })));
           setNeedsStart(true);
         } else {
-          const a = must(await supabase.from("attempts").select("*").eq("test_id", testId).eq("user_id", profile!.id).maybeSingle()) as Attempt | null;
-          if (!a) setNeedsStart(true);
-          else if (a.status !== "in_progress") {
-            navigate(`/results/${a.id}`, { replace: true });
-            return;
+          const mine = must(
+            await supabase.from("attempts").select("*").eq("test_id", testId).eq("user_id", userId!).order("attempt_number"),
+          ) as Attempt[];
+          const current = mine.find((a) => a.status === "in_progress");
+          const state = startState(t, mine, true);
+          if (current) {
+            setAttempt(current);
+            await loadAttemptData(current);
+          } else if (state === "start" || state === "retake" || mine.length === 0) {
+            setPriorAttempts(mine.length);
+            setNeedsStart(true);
           } else {
-            setAttempt(a);
-            await loadAttemptData(a);
+            // No new attempt allowed right now: show the latest results instead.
+            navigate(`/results/${mine[mine.length - 1].id}`, { replace: true });
+            return;
           }
         }
       } catch (err) {
@@ -122,7 +133,7 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
         setLoading(false);
       }
     })();
-  }, [testId, preview, profile, navigate, loadAttemptData]);
+  }, [testId, preview, userId, navigate, loadAttemptData]);
 
   // ---- clock --------------------------------------------------------------
   useEffect(() => {
@@ -207,7 +218,7 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
     try {
       const res = await callFn<{ attempt: Attempt; server_now: string }>("start_attempt", { test_id: testId });
       setOffset(new Date(res.server_now).getTime() - Date.now());
-      const a = { ...res.attempt, user_id: profile!.id };
+      const a = { ...res.attempt, user_id: userId! };
       setAttempt(a);
       await loadAttemptData(a);
       setNeedsStart(false);
@@ -258,6 +269,7 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
         <h1>{test.title}</h1>
         <p className="muted">
           {test.duration_minutes} minutes{preview ? ` · ${questions.length} questions · ${pts} points` : ""}
+          {!preview && test.max_attempts !== 1 && ` · attempt ${priorAttempts + 1}${test.max_attempts ? ` of ${test.max_attempts}` : ""}`}
         </p>
         <div className="card">
           <Markdown>{test.description || "_No description._"}</Markdown>
@@ -268,7 +280,14 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
             <li>The timer starts when you click Start and keeps running if you close the page.</li>
             <li>Answers save automatically. When time is up, your test is submitted for you.</li>
             <li>Hints cost points. You'll see the cost before you reveal one.</li>
-            <li>You get one attempt.</li>
+            {test.max_attempts === 1 ? (
+              <li>You get one attempt.</li>
+            ) : (
+              <li>
+                {test.max_attempts ? `You get ${test.max_attempts} attempts.` : "You can take this test as many times as you like."} Each attempt is
+                graded on its own; you can retake it once your results are released.
+              </li>
+            )}
           </ul>
         </div>
         <ErrorBox error={error} />
@@ -276,7 +295,7 @@ function Runner({ testId, preview }: { testId: string; preview: boolean }) {
           <p className="muted">This test isn't open.</p>
         ) : (
           <button className="btn btn-primary btn-lg" onClick={start}>
-            Start {preview ? "preview" : "test"}
+            {preview ? "Start preview" : priorAttempts > 0 ? `Start attempt ${priorAttempts + 1}` : "Start test"}
           </button>
         )}
       </section>

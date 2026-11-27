@@ -155,7 +155,10 @@ test("acceptance 3: the admin rebuilds the demo test from scratch in the UI", as
   // Preview as taker shows the same questions without saving anything.
   await page.getByRole("link", { name: "Preview as taker" }).click();
   await page.getByRole("button", { name: "Start preview" }).click();
-  await page.getByText(`Question 1 of ${demo.questions.length}`).waitFor();
+  await page.getByText(`Question 1 of ${demo.questions.length}`).waitFor().catch(async (err) => {
+    await page.screenshot({ path: ".shots/preview-failure.png", fullPage: true });
+    throw err;
+  });
   assert.equal(must(await service.from("attempts").select("id").eq("test_id", rebuiltId)).length, 0, "preview created an attempt");
   await page.context().close();
 });
@@ -225,7 +228,7 @@ test("acceptance 4 in the UI: a taker signs up, takes the rebuilt test and sees 
 
   // Taker sees their score: 8 (mcq) + 4 (bug) + 18 (flag minus hint) + AI scores.
   await page.goto(`${WEB}/#/`);
-  await page.locator(".test-card", { hasText: "UI rebuild" }).getByRole("link", { name: "See results" }).click();
+  await page.locator(".test-card", { hasText: "UI rebuild" }).getByRole("link", { name: "Attempt 1: see results" }).click();
   const hero = await page.locator(".score-hero .big").innerText();
   console.log("taker score:", hero.replace(/\s+/g, " "));
   const score = Number(hero.split("/")[0]);

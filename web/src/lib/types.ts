@@ -18,6 +18,8 @@ export interface Test {
   duration_minutes: number;
   status: TestStatus;
   results_visible: boolean;
+  /** How many attempts each taker gets; null = unlimited. */
+  max_attempts: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +76,7 @@ export interface Attempt {
   id: string;
   test_id: string;
   user_id: string;
+  attempt_number: number;
   started_at: string;
   deadline_at: string;
   submitted_at: string | null;
@@ -111,3 +114,19 @@ export const TYPE_LABELS: Record<QuestionType, string> = {
   bughunt: "Bug hunt",
   ctf: "Capture the flag",
 };
+
+/** Why a taker can or can't start another attempt (mirrors start_attempt's rules). */
+export type StartState = "start" | "continue" | "retake" | "wait_for_results" | "no_attempts_left" | "closed";
+
+export function startState(test: Test, attempts: Attempt[], isTaker: boolean): StartState {
+  if (attempts.some((a) => a.status === "in_progress")) return "continue";
+  if (!isTaker || test.status !== "open") return "closed";
+  if (test.max_attempts !== null && attempts.length >= test.max_attempts) return "no_attempts_left";
+  if (attempts.length === 0) return "start";
+  return test.results_visible ? "retake" : "wait_for_results";
+}
+
+export function attemptsLabel(test: Pick<Test, "max_attempts">): string {
+  if (test.max_attempts === null) return "unlimited attempts";
+  return test.max_attempts === 1 ? "1 attempt" : `${test.max_attempts} attempts`;
+}

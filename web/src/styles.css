@@ -594,3 +594,24 @@ ul.plain {
 .test-card h2 {
   margin-top: 0;
 }
+
+/* multiple attempts */
+.attempt-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.92rem;
+}
+.attempt-list li {
+  margin: 0.2rem 0;
+}
+.attempt-nav {
+  margin-bottom: 1rem;
+}
+a.pill {
+  text-decoration: none;
+}
+.best-mark {
+  color: var(--good);
+  font-weight: 700;
+}

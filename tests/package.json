@@ -8,7 +8,8 @@
     "test:flow": "node --test --test-reporter=spec flow.test.mjs",
     "test:ctf": "node --test --test-reporter=spec ctf.test.mjs",
     "test:ai": "node --test --test-reporter=spec ai.test.mjs",
-    "test:ui": "node --test --test-reporter=spec ui.e2e.mjs"
+    "test:ui": "node --test --test-reporter=spec ui.e2e.mjs",
+    "test:retake": "node --test --test-reporter=spec retake.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2"

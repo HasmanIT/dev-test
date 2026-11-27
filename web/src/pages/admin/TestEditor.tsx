@@ -18,7 +18,7 @@ export function TestEditor() {
   const { testId } = useParams();
   const navigate = useNavigate();
   const [test, setTest] = useState<Test | null>(null);
-  const [draft, setDraft] = useState<Pick<Test, "title" | "description" | "duration_minutes"> | null>(null);
+  const [draft, setDraft] = useState<Pick<Test, "title" | "description" | "duration_minutes" | "max_attempts"> | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [keys, setKeys] = useState<Map<string, QuestionKey>>(new Map());
   const [hints, setHints] = useState<Hint[]>([]);
@@ -40,7 +40,7 @@ export function TestEditor() {
       if (mine !== version.current) return; // a newer load or local edit superseded this one
       setTest(t);
       // Keep unsaved edits: reloads (after saving a question, or StrictMode's double effect) must not clobber the draft.
-      setDraft((prev) => prev ?? { title: t.title, description: t.description, duration_minutes: t.duration_minutes });
+      setDraft((prev) => prev ?? { title: t.title, description: t.description, duration_minutes: t.duration_minutes, max_attempts: t.max_attempts });
       setQuestions(qs);
       setKeys(new Map(ks.map((k) => [k.question_id, k])));
       setHints(hs);
@@ -122,7 +122,11 @@ export function TestEditor() {
 
   if (!test || !draft) return error ? <ErrorBox error={error} /> : <Spinner />;
   const totalPoints = questions.reduce((s, q) => s + q.points, 0);
-  const dirty = draft.title !== test.title || draft.description !== test.description || draft.duration_minutes !== test.duration_minutes;
+  const dirty =
+    draft.title !== test.title ||
+    draft.description !== test.description ||
+    draft.duration_minutes !== test.duration_minutes ||
+    draft.max_attempts !== test.max_attempts;
   const counts = questions.reduce<Record<string, number>>((m, q) => ({ ...m, [q.type]: (m[q.type] ?? 0) + 1 }), {});
 
   return (
@@ -180,6 +184,22 @@ export function TestEditor() {
             onChange={(e) => setDraft({ ...draft, duration_minutes: Number(e.target.value) })}
           />
         </label>
+        <label>
+          Max attempts per intern (leave empty for unlimited)
+          <input
+            type="number"
+            min={1}
+            max={100}
+            placeholder="unlimited"
+            value={draft.max_attempts ?? ""}
+            onChange={(e) => setDraft({ ...draft, max_attempts: e.target.value === "" ? null : Math.max(1, Number(e.target.value)) })}
+          />
+        </label>
+        {draft.max_attempts !== 1 && (
+          <p className="muted small">
+            Retakes unlock for an intern once you release results. Flags don't change between attempts, so CTF answers carry over.
+          </p>
+        )}
         <label>
           Description (markdown; state the rule on AI use here)
           <textarea rows={6} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />

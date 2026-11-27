@@ -21,7 +21,7 @@ before(async () => {
     console.log(`make_flag.py not found at ${script}; using recorded flags`);
     flags = ALL_FLAGS;
   }
-  assert.equal(Object.keys(flags).length, 4);
+  assert.ok(Object.keys(flags).length >= 4, "make_flag.py printed too few flags");
   for (const f of Object.values(flags)) assert.match(f, /^FLAG\{[0-9a-f]{12}\}$/);
 
   admin = await makeUser("admin", "CTF Admin");
@@ -46,7 +46,7 @@ test("admin sets each flag; only a salted hash is stored", async () => {
     assert.equal(r.status, 200, JSON.stringify(r.body));
   }
   const keys = must(await service.from("question_keys").select("*").in("question_id", questions.map((q) => q.id)));
-  assert.equal(keys.length, 4);
+  assert.equal(keys.length, questions.length);
   const salts = new Set();
   for (const k of keys) {
     assert.match(k.flag_hash, /^[0-9a-f]{64}$/);
@@ -54,7 +54,7 @@ test("admin sets each flag; only a salted hash is stored", async () => {
     salts.add(k.flag_salt);
     assert.ok(!JSON.stringify(k).includes("FLAG{"), "plain flag stored");
   }
-  assert.equal(salts.size, 4, "each flag gets its own random salt");
+  assert.equal(salts.size, questions.length, "each flag gets its own random salt");
   const notCtf = await fn(admin.client, "set_question_key", { question_id: questions[0].id, correct: ["a"] });
   assert.equal(notCtf.status, 200);
 });
@@ -74,7 +74,7 @@ test("each reference flag is accepted, and a near-miss is not", async () => {
     assert.equal(again.body.already_captured, true);
   }
   const caps = must(await taker.client.rpc("my_captures", { p_attempt_id: start.body.attempt.id }));
-  assert.equal(caps.filter((c) => c.captured).length, 4);
+  assert.equal(caps.filter((c) => c.captured).length, questions.length);
 });
 
 test("10 wrong guesses trigger a 60-second cooldown; guesses are logged without the guess", async () => {

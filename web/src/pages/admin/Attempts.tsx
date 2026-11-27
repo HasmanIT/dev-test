@@ -41,7 +41,7 @@ export function Attempts() {
       const t = must(await supabase.from("tests").select("*").eq("id", testId!).single()) as Test;
       const qs = must(await supabase.from("questions").select("*").eq("test_id", t.id).order("position").order("id")) as Question[];
       const atts = must(
-        await supabase.from("attempts").select("*, profiles(display_name, email)").eq("test_id", t.id).order("started_at"),
+        await supabase.from("attempts").select("*, profiles(display_name, email)").eq("test_id", t.id).order("user_id").order("attempt_number"),
       ) as Row[];
       const ids = atts.map((a) => a.id);
       const [grades, reveals, flags] = ids.length
@@ -97,10 +97,23 @@ export function Attempts() {
     }
   }
 
+  // Each intern's best submitted attempt (ties go to the earliest attempt).
+  function bestByUser(): Map<string, { attemptId: string; score: number }> {
+    const best = new Map<string, { attemptId: string; score: number }>();
+    for (const a of rows) {
+      if (a.status === "in_progress") continue;
+      const score = stats.get(a.id)?.score ?? 0;
+      const cur = best.get(a.user_id);
+      if (!cur || score > cur.score) best.set(a.user_id, { attemptId: a.id, score });
+    }
+    return best;
+  }
+
   function exportCsv() {
+    const best = bestByUser();
     const maxPoints = questions.reduce((s, q) => s + q.points, 0);
     const header = [
-      "name", "email", "status", "started_at", "submitted_at", "time_taken_seconds", "score", "max_score",
+      "name", "email", "attempt", "is_best_attempt", "best_score", "status", "started_at", "submitted_at", "time_taken_seconds", "score", "max_score",
       "needs_review", "hints_used", "hint_cost", "flags_captured", "wrong_flag_guesses",
       ...questions.map((q, i) => `Q${i + 1}_${q.type}`),
     ];
@@ -110,7 +123,9 @@ export function Attempts() {
       const taken = a.submitted_at ? Math.round((new Date(a.submitted_at).getTime() - new Date(a.started_at).getTime()) / 1000) : "";
       lines.push(
         [
-          a.profiles?.display_name, a.profiles?.email, a.status, a.started_at, a.submitted_at ?? "", taken,
+          a.profiles?.display_name, a.profiles?.email, a.attempt_number,
+          best.get(a.user_id)?.attemptId === a.id ? "yes" : "no",
+          best.has(a.user_id) ? fmtScore(best.get(a.user_id)!.score) : "", a.status, a.started_at, a.submitted_at ?? "", taken,
           fmtScore(s.score), maxPoints, s.needsReview, s.hintsUsed, s.hintCost, s.flagsCaptured, s.wrongGuesses,
           ...questions.map((q) => {
             const g = s.byQuestion.get(q.id);
@@ -132,6 +147,10 @@ export function Attempts() {
 
   if (!test) return error ? <ErrorBox error={error} /> : <Spinner />;
   const maxPoints = questions.reduce((s, q) => s + q.points, 0);
+  const best = bestByUser();
+  const attemptsPerUser = new Map<string, number>();
+  rows.forEach((a) => attemptsPerUser.set(a.user_id, (attemptsPerUser.get(a.user_id) ?? 0) + 1));
+  const interns = attemptsPerUser.size;
   const overdue = rows.filter((a) => a.status === "in_progress" && new Date(a.deadline_at).getTime() + 10_000 < Date.now()).length;
 
   return (
@@ -140,7 +159,9 @@ export function Attempts() {
         <Link to={`/admin/tests/${test.id}`}>← {test.title}</Link>
       </p>
       <div className="row-between">
-        <h1>Attempts</h1>
+        <h1>
+          Attempts <span className="muted">({rows.length} from {interns} intern{interns === 1 ? "" : "s"})</span>
+        </h1>
         <div className="row">
           <button
             className="btn"
@@ -179,6 +200,7 @@ export function Attempts() {
         <thead>
           <tr>
             <th>Taker</th>
+            <th>Attempt</th>
             <th>Status</th>
             <th>Started</th>
             <th>Time taken</th>
@@ -191,12 +213,22 @@ export function Attempts() {
         <tbody>
           {rows.map((a) => {
             const s = stats.get(a.id)!;
+            const isBest = best.get(a.user_id)?.attemptId === a.id && (attemptsPerUser.get(a.user_id) ?? 0) > 1;
             const taken = a.submitted_at ? new Date(a.submitted_at).getTime() - new Date(a.started_at).getTime() : null;
             return (
               <tr key={a.id} className={s.needsReview ? "needs-review" : ""}>
                 <td>
                   <Link to={`/admin/attempts/${a.id}`}>{a.profiles?.display_name || "(no name)"}</Link>
                   <div className="muted small">{a.profiles?.email}</div>
+                </td>
+                <td>
+                  #{a.attempt_number}
+                  {isBest && (
+                    <span className="best-mark" title="Best attempt">
+                      {" "}
+                      ★ best
+                    </span>
+                  )}
                 </td>
                 <td>
                   <span className={`pill pill-${a.status}`}>{a.status.replace("_", " ")}</span>
