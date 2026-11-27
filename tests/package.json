@@ -1,0 +1,19 @@
+{
+  "name": "intern-test-platform-acceptance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=spec",
+    "test:rls": "node --test --test-reporter=spec rls.test.mjs",
+    "test:flow": "node --test --test-reporter=spec flow.test.mjs",
+    "test:ctf": "node --test --test-reporter=spec ctf.test.mjs",
+    "test:ai": "node --test --test-reporter=spec ai.test.mjs",
+    "test:ui": "node --test --test-reporter=spec ui.e2e.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1"
+  }
+}
